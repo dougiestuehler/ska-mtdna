@@ -23,13 +23,13 @@ The ska-mtdna.py script is released as a Python script for download, tested with
 Before you begin, you will need to download and install the required software, which are installed on the command line most simply with the [Conda](https://docs.conda.io/en/latest/) package manager.
 Software descriptions can be found at the following links:
 
--Python 3 
+- Python 3: 
 Preinstalled in most linux distributions or installed into Conda environment.
 
-- SKA2 
+- SKA2: 
 https://github.com/bacpop/ska.rust
 
-- FastTree
+- FastTree: 
 https://github.com/morgannprice/fasttree
 
 To get ska-mtdna.py setup, setup [Conda](https://docs.conda.io/en/latest/), then run these commands in order:
@@ -60,11 +60,11 @@ Make sure the necessary software is installed and accessible from the command-li
 
 1. Network mode
 
-python3 ska-mtdna.py --fasta-dir fasta_input_folder
+`python3 ska-mtdna.py --fasta-dir fasta_input_folder`
 
 2. Phylo mode
 
-python3 ska-mtdna.py --fasta-dir fasta_input_folder --phylo
+`python3 ska-mtdna.py --fasta-dir fasta_input_folder --phylo`
 
 
 
@@ -74,7 +74,7 @@ Options:
 1. Mandatory arguments
 
 ```
---fasta-dir Directory containing *.fa or *.fasta files
+--fasta-dir Directory containing input *.fa or *.fasta files
 ```
 
 2. Optional arguments
@@ -99,6 +99,7 @@ Output:
 A successful run of ska-mtdna.py will result in a directory output_repeats_masked by default containing:
 
 1. Files
+
 `initial_results.csv`  Results of the *ska align* algorithm (network and phylo).
 
 `final_results.csv`  Results of the *ska map* algorithm (network only). Number of paremeter sets reported by `--num_top_params`.
