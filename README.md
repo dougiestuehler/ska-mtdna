@@ -74,7 +74,7 @@ Options:
 1. Mandatory arguments
 
 ```
---fasta-dir Directory containing input *.fa or *.fasta files
+--fasta-dir Directory containing input *.fa or *.fasta files. Must contain 1 sequence per fasta file, or separate fasta files for each sequence.
 ```
 
 2. Optional arguments
