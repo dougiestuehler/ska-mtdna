@@ -5,7 +5,6 @@ import subprocess
 import dendropy
 import pandas as pd
 from pathlib import Path
-import glob
 import logging
 import numpy as np
 import matplotlib.pyplot as plt
@@ -15,6 +14,9 @@ import sys
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+# Only allow these FASTA file endings.
+ALLOWED_FASTA_SUFFIXES = {".fa", ".fasta"}
 
 # ASCII art for default message
 ASCII_ART = """⢠⠀⠀⠀⠀⣀⣠⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
@@ -46,7 +48,7 @@ def parse_args():
     
     parser.add_argument('-k', type=str, default='11,13,15,17,19,21,23,25,27,29', help='Comma-separated k-mer sizes: default=11,13,15,17,19,21,23,25,27,29')
     parser.add_argument('-m', type=str, default='0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1', help='Comma-separated m values: 0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1')
-    parser.add_argument('--fasta-dir', type=str, required=True, help='Directory containing *.fa or *.fasta files (required)')
+    parser.add_argument('--fasta-dir', type=str, required=True, help='Directory containing .fa or .fasta files only (required)')
     parser.add_argument('--output-dir', type=str, default='output', help='Directory for output files')
     parser.add_argument('--num_top_params', type=int, default=10, help='Number of top-scoring k,m parameter sets to examine with ska map (default: 10, network mode only)')
     parser.add_argument('--wb', type=float, default=None, help='Weight for bootstrap score (network: 0.87, phylo: 0.87)')
@@ -87,28 +89,80 @@ def parse_args():
     
     return args
 
-def update_fasta_headers(fasta_dir):
-    """Update FASTA headers to match filename (without .fa or .fasta extension)."""
-    fasta_files = glob.glob(str(Path(fasta_dir) / "*.fa*"))
+def find_fasta_files(fasta_dir):
+    """Return FASTA files ending only in .fa or .fasta."""
+    fasta_dir = Path(fasta_dir)
+    if not fasta_dir.is_dir():
+        raise FileNotFoundError(f"FASTA directory does not exist: {fasta_dir}")
+
+    fasta_files = sorted(
+        p for p in fasta_dir.iterdir()
+        if p.is_file() and p.suffix.lower() in ALLOWED_FASTA_SUFFIXES
+    )
+
     if not fasta_files:
-        raise FileNotFoundError(f"No *.fa or *.fasta files found in {fasta_dir}")
-    
-    for fasta_file in fasta_files:
-        fasta_path = Path(fasta_file)
+        raise FileNotFoundError(f"No .fa or .fasta files found in {fasta_dir}")
+
+    return fasta_files
+
+
+def find_reference_fasta(fasta_dir, sample_name):
+    """Find the reference FASTA for a sample using either .fa or .fasta."""
+    fasta_dir = Path(fasta_dir)
+
+    # Prefer exact lowercase endings first. This keeps behavior predictable when both exist.
+    exact_candidates = [
+        fasta_dir / f"{sample_name}.fa",
+        fasta_dir / f"{sample_name}.fasta",
+    ]
+    existing_exact = [p for p in exact_candidates if p.is_file()]
+    if existing_exact:
+        if len(existing_exact) > 1:
+            logging.warning(
+                f"Found both .fa and .fasta reference files for {sample_name}; using {existing_exact[0]}"
+            )
+        return existing_exact[0]
+
+    # Fallback: case-insensitive suffix check, still restricted to .fa or .fasta only.
+    matching_files = [
+        p for p in find_fasta_files(fasta_dir)
+        if p.stem == sample_name
+    ]
+
+    if not matching_files:
+        allowed = ", ".join(sorted(ALLOWED_FASTA_SUFFIXES))
+        raise FileNotFoundError(
+            f"Reference FASTA for sample '{sample_name}' not found in {fasta_dir}. "
+            f"Expected '{sample_name}.fa' or '{sample_name}.fasta' ({allowed} only)."
+        )
+
+    if len(matching_files) > 1:
+        logging.warning(
+            f"Found multiple reference FASTA files for {sample_name}; using {matching_files[0]}"
+        )
+
+    return matching_files[0]
+
+
+def update_fasta_headers(fasta_dir):
+    """Update FASTA headers to match filename without .fa or .fasta extension."""
+    fasta_files = find_fasta_files(fasta_dir)
+
+    for fasta_path in fasta_files:
         sample_name = fasta_path.stem
-        temp_file = fasta_path.with_suffix('.temp.fa')
-        
+        temp_file = fasta_path.with_suffix(fasta_path.suffix + '.tmp')
+
         with open(fasta_path, 'r') as infile, open(temp_file, 'w') as outfile:
             for line in infile:
                 if line.startswith('>'):
                     outfile.write(f'>{sample_name}\n')
                 else:
                     outfile.write(line)
-        
+
         shutil.move(temp_file, fasta_path)
         logging.info(f"Updated headers in {fasta_path} to {sample_name}")
-    
-    return [Path(f) for f in fasta_files]
+
+    return fasta_files
 
 def validate_alignment(aln_file):
     """Check if alignment file is valid and compute metrics, counting only valid sites."""
@@ -640,9 +694,10 @@ def main():
             logging.info(f"Most divergent sample for k={best_k}, m={m}: {most_divergent}")
             
             # Find reference FASTA
-            reference_fasta = Path(args.fasta_dir) / f"{most_divergent}.fa"
-            if not reference_fasta.is_file():
-                logging.error(f"Reference FASTA {reference_fasta} for k={best_k}, m={m} not found")
+            try:
+                reference_fasta = find_reference_fasta(args.fasta_dir, most_divergent)
+            except FileNotFoundError as e:
+                logging.error(f"{e} for k={best_k}, m={m}")
                 continue
             logging.debug(f"Using reference FASTA: {reference_fasta}")
             
